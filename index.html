@@ -720,6 +720,12 @@ async function handleFile201Upload(p, label, fileInput, uploaderName){
     p.file201Uploads = p.file201Uploads || [];
     p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: uploaderName||'' });
     logActivity(`Uploaded a 201 document for ${fullName(p)}`);
+    // The file itself is already safely in Drive at this point — but that record of it existing
+    // (what actually drives "on file, last updated") has so far only ever lived in this browser's
+    // memory. Employees have no other way to save at all (auto-save is admin-only), so without this
+    // explicit save, the upload would appear to vanish the moment the page is left or refreshed,
+    // even though the underlying file never moved.
+    try{ await googleSaveAll(); }catch(e){ /* googleSaveAll already surfaces its own error to the user */ }
     render(); toast('201 document uploaded');
   }catch(err){ showAlert('Upload failed: ' + err.message); }
 }
@@ -1878,11 +1884,22 @@ function file201ChecklistCardHtml(){
   </div>`;
 }
 function renderFile201Checklist(){
+  const linkedPerson = (!isAdmin() && session.user && session.user.linkedPersonId) ? findPerson(session.user.linkedPersonId) : null;
   return `
     <div class="topline"><div><div class="eyebrow">Reference</div><h1>201 File Checklist</h1></div></div>
     <div class="lane-divider"></div>
     <div class="hint" style="margin-bottom:16px;">If applicable to your circumstances, please submit a copy of each of the following to your school's Administrative Officer for your 201 file:</div>
     <div class="card">${file201ChecklistCardHtml()}</div>
+    ${linkedPerson ? `
+    <div class="card" style="margin-top:14px;">
+      <div class="section-title" style="margin-top:0;">Upload a 201 Document</div>
+      <div class="hint" style="margin-bottom:10px;">${(linkedPerson.file201Uploads&&linkedPerson.file201Uploads.length) ? `On file — last updated ${fmtDate(linkedPerson.file201Uploads[0].uploadedAt)}. Only your admin can view these files; if you need a copy of your own documents, please request it from them directly.` : 'No 201 documents uploaded yet.'}</div>
+      <div class="fields">
+        <div class="field full"><label>What does this file contain?</label><select id="myFile201Label">${selectOptionsHtml(FILE_201_CHECKLIST, '')}<option value="Other">Other / Not Listed</option></select></div>
+        <div class="field full"><label>PDF File (max 10MB)</label><input type="file" accept="application/pdf" id="myFile201Input"></div>
+      </div>
+      <button class="btn small" id="myUploadFile201Btn" style="margin-top:9px;">Upload</button>
+    </div>` : ''}
   `;
 }
 function renderMyProfile(){
@@ -1926,12 +1943,7 @@ function renderMyProfile(){
         <div class="fields">${FIELD_GROUPS[grp].filter(([k])=>k!=='photo').map(([k,l])=>`<div class="field"><label>${esc(l)}</label><div class="val">${esc(p[k]) || '<span style="color:var(--muted);font-weight:400;">—</span>'}</div></div>`).join('')}</div>
       `).join('')}
       <div class="section-title">201 Documents</div>
-      <div class="hint" style="margin-bottom:10px;">${(p.file201Uploads&&p.file201Uploads.length) ? `On file — last updated ${fmtDate(p.file201Uploads[0].uploadedAt)}. Only your admin can view these files; if you need a copy of your own documents, please request it from them directly.` : 'No 201 documents uploaded yet.'}</div>
-      <div class="fields no-print">
-        <div class="field full"><label>What does this file contain?</label><select id="myFile201Label">${selectOptionsHtml(FILE_201_CHECKLIST, '')}<option value="Other">Other / Not Listed</option></select></div>
-        <div class="field full"><label>PDF File (max 10MB)</label><input type="file" accept="application/pdf" id="myFile201Input"></div>
-      </div>
-      <button class="btn small no-print" id="myUploadFile201Btn" style="margin-top:9px;">Upload</button>
+      <div class="hint" style="margin-bottom:10px;">${(p.file201Uploads&&p.file201Uploads.length) ? `On file — last updated ${fmtDate(p.file201Uploads[0].uploadedAt)}. Only your admin can view these files; if you need a copy of your own documents, please request it from them directly.` : 'No 201 documents uploaded yet.'} To upload or update, go to <strong>201 File Checklist</strong> in the sidebar.</div>
       <div class="hint no-print" style="margin-top:16px;">This view is read-only. To correct anything, use "Request an Update" above — your admin reviews changes before they take effect.</div>
     </div>
   `;
@@ -2864,11 +2876,14 @@ function bindDynamicEvents(){
     render(); toast(`Imported ${imported} record(s)${skipped?`, skipped ${skipped} duplicate(s)`:''}`);
   });
   const uploadFile201Btn = document.getElementById('uploadFile201Btn');
-  if(uploadFile201Btn) uploadFile201Btn.addEventListener('click', ()=>{
+  if(uploadFile201Btn) uploadFile201Btn.addEventListener('click', async ()=>{
     const p = findPerson(state.activeProfileId);
     const label = document.getElementById('file201Label').value;
     const fileInput = document.getElementById('file201Input');
-    handleFile201Upload(p, label, fileInput, session.user?.displayName || 'Admin');
+    const originalText = uploadFile201Btn.textContent;
+    uploadFile201Btn.disabled = true; uploadFile201Btn.textContent = 'Uploading…';
+    try{ await handleFile201Upload(p, label, fileInput, session.user?.displayName || 'Admin'); }
+    finally{ uploadFile201Btn.disabled = false; uploadFile201Btn.textContent = originalText; }
   });
 
   const addPosHistBtn = document.getElementById('addPosHistBtn');
@@ -3302,11 +3317,14 @@ function bindDynamicEvents(){
     render();
   }));
   const myUploadFile201Btn = document.getElementById('myUploadFile201Btn');
-  if(myUploadFile201Btn) myUploadFile201Btn.addEventListener('click', ()=>{
+  if(myUploadFile201Btn) myUploadFile201Btn.addEventListener('click', async ()=>{
     const p = findPerson(session.user.linkedPersonId);
     const label = document.getElementById('myFile201Label').value;
     const fileInput = document.getElementById('myFile201Input');
-    handleFile201Upload(p, label, fileInput, session.user?.displayName || session.user?.username || 'Employee');
+    const originalText = myUploadFile201Btn.textContent;
+    myUploadFile201Btn.disabled = true; myUploadFile201Btn.textContent = 'Uploading…';
+    try{ await handleFile201Upload(p, label, fileInput, session.user?.displayName || session.user?.username || 'Employee'); }
+    finally{ myUploadFile201Btn.disabled = false; myUploadFile201Btn.textContent = originalText; }
   });
   const refreshMyProfileBtn = document.getElementById('refreshMyProfileBtn');
   if(refreshMyProfileBtn) refreshMyProfileBtn.addEventListener('click', async ()=>{
