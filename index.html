@@ -718,7 +718,7 @@ async function handleFile201Upload(p, label, fileInput, uploaderName){
     const res = await appsScriptCall('uploadPersonDocument', { filename: file.name, base64: b64, personId: p._uid, personName: fullName(p) });
     if(!res.url) throw new Error('Backend did not return a file URL.');
     p.file201Uploads = p.file201Uploads || [];
-    p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: fmtDate(new Date()), filename: file.name, uploadedBy: uploaderName||'' });
+    p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: uploaderName||'' });
     logActivity(`Uploaded a 201 document for ${fullName(p)}`);
     render(); toast('201 document uploaded');
   }catch(err){ showAlert('Upload failed: ' + err.message); }
@@ -732,7 +732,7 @@ async function gmailSend(subject, bodyText){
 /* ============================================================= DATE / AUTOMATION HELPERS ============================================================= */
 function parseD(str){ if(!str) return null; const d = new Date(str); return isNaN(d) ? null : d; }
 function addYears(date, n){ const d = new Date(date); d.setFullYear(d.getFullYear()+n); return d; }
-function fmtDate(d){ if(!d) return '—'; return d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}); }
+function fmtDate(d){ if(!d) return '—'; const dateObj = (d instanceof Date) ? d : new Date(d); if(isNaN(dateObj)) return typeof d==='string' ? d : '—'; return dateObj.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}); }
 function formatDMY(isoStr){ if(!isoStr) return ''; const parts = String(isoStr).split('-'); if(parts.length!==3) return isoStr; const [y,m,d] = parts; return `${d}/${m}/${y}`; }
 function daysBetween(a,b){ return Math.round((b-a)/(24*3600*1000)); }
 function yearsOfService(p){ const start = parseD(p.originalAppointmentDate) || parseD(p.firstDayOfService); if(!start) return null; return ((Date.now()-start.getTime())/(365.25*24*3600*1000)).toFixed(1); }
@@ -3007,7 +3007,7 @@ function bindDynamicEvents(){
         try{
           const b64 = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result.split(',')[1]); r.onerror=reject; r.readAsDataURL(file); });
           const res = await appsScriptCall('uploadPersonDocument', { filename: file.name, base64: b64, personId: sub._uid, personName: `${firstName} ${lastName}` });
-          if(res.url) sub._newFile201 = { url: res.url, label: label||'', uploadedAt: fmtDate(new Date()), filename: file.name, uploadedBy: `${firstName} ${lastName}` };
+          if(res.url) sub._newFile201 = { url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: `${firstName} ${lastName}` };
         }catch(e){ console.log('201 document upload failed at submission time: '+e.message); }
       }
     }
