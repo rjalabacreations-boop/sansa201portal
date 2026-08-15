@@ -491,7 +491,8 @@ async function appsScriptCall(action, data){
   if(json.error) throw new Error(json.error);
   return json;
 }
-function rowsFromPersonnel(){ return [PERSON_COLS, ...personnel.map(p=>PERSON_COLS.map(c=>{ const v=p[c]; return (c==='sslLog'||c==='loyaltyLog'||c==='positionHistoryLog'||c==='history'||c==='file201Uploads'||c==='postgraduateLog') ? JSON.stringify(v||[]) : (v ?? ''); }))]; }
+function rowFromPerson(p){ return PERSON_COLS.map(c=>{ const v=p[c]; return (c==='sslLog'||c==='loyaltyLog'||c==='positionHistoryLog'||c==='history'||c==='file201Uploads'||c==='postgraduateLog') ? JSON.stringify(v||[]) : (v ?? ''); }); }
+function rowsFromPersonnel(){ return [PERSON_COLS, ...personnel.map(rowFromPerson)]; }
 // Parses raw CSV text into an array of row-arrays, correctly handling quoted fields (including
 // embedded commas, escaped "" quotes, and newlines inside a quoted field). Returns [] for empty input.
 function parseCsvText(text){
@@ -720,12 +721,13 @@ async function handleFile201Upload(p, label, fileInput, uploaderName){
     p.file201Uploads = p.file201Uploads || [];
     p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: uploaderName||'' });
     logActivity(`Uploaded a 201 document for ${fullName(p)}`);
-    // The file itself is already safely in Drive at this point — but that record of it existing
-    // (what actually drives "on file, last updated") has so far only ever lived in this browser's
-    // memory. Employees have no other way to save at all (auto-save is admin-only), so without this
-    // explicit save, the upload would appear to vanish the moment the page is left or refreshed,
-    // even though the underlying file never moved.
-    try{ await googleSaveAll(); }catch(e){ /* googleSaveAll already surfaces its own error to the user */ }
+    // Updates ONLY this one person's row on the backend — deliberately not a full googleSaveAll(),
+    // since this can run from an Employee session where the local copy of everyone else's data may
+    // be stale. A full save from a stale copy could silently overwrite other people's records; this
+    // targeted upsert touches this one row and nothing else, no matter how old the rest of the local
+    // data is.
+    try{ await appsScriptCall('upsertPerson', { header: PERSON_COLS, row: rowFromPerson(p) }); }
+    catch(e){ showAlert('The file uploaded successfully, but saving the record of it failed: ' + e.message + '\n\nThe file itself is safe in Drive, but you may need to try the upload again to get it listed here.'); }
     render(); toast('201 document uploaded');
   }catch(err){ showAlert('Upload failed: ' + err.message); }
 }
