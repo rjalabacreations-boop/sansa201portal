@@ -473,7 +473,7 @@ const PERSON_COLS = ['_uid','schoolId','sslLog','loyaltyLog','positionHistoryLog
 const USER_COLS = ['username','salt','passHash','role','displayName','createdAt','linkedPersonId'];
 
 function isGoogleConfigured(){ return !!(settings.google.scriptUrl && settings.google.accessKey); }
-async function appsScriptCall(action, data){
+async function appsScriptCall(action, data, _isRetry){
   if(!isGoogleConfigured()) throw new Error('Backend not configured. Set your Apps Script Web App URL and Access Key in Settings first.');
   const res = await fetch(settings.google.scriptUrl, {
     method:'POST',
@@ -483,6 +483,14 @@ async function appsScriptCall(action, data){
   let json;
   try{ json = JSON.parse(rawText); }
   catch(e){
+    // Known Apps Script quirk: right after a fresh deployment, Google can briefly redirect a
+    // POST request in a way that silently turns it into a GET — landing on the plain-text
+    // "DATA BACKEND" warning page instead of the actual save/load logic. This is a one-time,
+    // self-resolving hiccup rather than a real problem, so retry silently once before ever
+    // bothering the user with an error.
+    if(!_isRetry && /DATA BACKEND/.test(rawText)){
+      return appsScriptCall(action, data, true);
+    }
     if(/^\s*<(!DOCTYPE|html)/i.test(rawText)){
       throw new Error('The backend didn\'t return the expected data — it sent back a web page instead of a result. This usually means the Web App URL in Settings is incorrect, the Apps Script deployment needs to be updated (Deploy → Manage deployments → New version), or Google is asking for re-authorization. Check Settings → Google Backend Connection and try Test Connection.');
     }
