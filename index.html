@@ -1919,8 +1919,13 @@ function renderFile201Checklist(){
     <div class="card">${file201ChecklistCardHtml()}</div>
     ${linkedPerson ? `
     <div class="card" style="margin-top:14px;">
-      <div class="section-title" style="margin-top:0;">Upload a 201 Document</div>
-      <div class="hint" style="margin-bottom:10px;">${(linkedPerson.file201Uploads&&linkedPerson.file201Uploads.length) ? `On file — last updated ${fmtDate(linkedPerson.file201Uploads[0].uploadedAt)}. Only your admin can view these files; if you need a copy of your own documents, please request it from them directly.` : 'No 201 documents uploaded yet.'}</div>
+      <div class="section-title" style="margin-top:0;">Your 201 Documents</div>
+      ${(linkedPerson.file201Uploads&&linkedPerson.file201Uploads.length) ? `
+      <div class="hint" style="margin-bottom:10px;">Only your admin can open these files — if you need an actual copy, please request it from them directly.</div>
+      <table class="ssl-table"><thead><tr><th>Label</th><th>Uploaded</th><th>By</th></tr></thead>
+      <tbody>${linkedPerson.file201Uploads.map(u=>`<tr><td>${esc(u.label||'(No label)')}</td><td>${fmtDate(u.uploadedAt)}</td><td>${esc(u.uploadedBy||'—')}</td></tr>`).join('')}</tbody></table>
+      ` : `<div class="hint" style="margin-bottom:10px;">No 201 documents uploaded yet.</div>`}
+      <div class="section-title">Upload a 201 Document</div>
       <div class="fields">
         <div class="field full"><label>What does this file contain?</label><select id="myFile201Label">${selectOptionsHtml(FILE_201_CHECKLIST, '')}<option value="Other">Other / Not Listed</option></select></div>
         <div class="field full"><label>PDF File (max 10MB)</label><input type="file" accept="application/pdf" id="myFile201Input"></div>
