@@ -483,12 +483,18 @@ async function appsScriptCall(action, data, _isRetry){
   let json;
   try{ json = JSON.parse(rawText); }
   catch(e){
-    // Known Apps Script quirk: right after a fresh deployment, Google can briefly redirect a
-    // POST request in a way that silently turns it into a GET — landing on the plain-text
-    // "DATA BACKEND" warning page instead of the actual save/load logic. This is a one-time,
-    // self-resolving hiccup rather than a real problem, so retry silently once before ever
-    // bothering the user with an error.
-    if(!_isRetry && /DATA BACKEND/.test(rawText)){
+    // Any non-JSON response here is treated as potentially transient before it's treated as a
+    // real problem — this covers two known, unrelated causes that produce the same symptom:
+    // (1) a redirect quirk right after a fresh deployment that briefly turns a POST into a GET,
+    // landing on the plain-text "DATA BACKEND" warning page instead of the real logic, and
+    // (2) Apps Script occasionally rejecting a request outright when too many hit the same
+    // script at once, before it even reaches the save/load code, returning a generic HTML error
+    // page. Both resolve themselves on a retry; a genuine misconfiguration (wrong URL, a
+    // deployment that needs updating, an auth prompt) will still fail the same way afterward and
+    // correctly surface the error then, so retrying first never hides a real problem — it only
+    // ever saves the person from being bothered by a hiccup that would have fixed itself anyway.
+    if(!_isRetry){
+      await new Promise(r=>setTimeout(r, 800));
       return appsScriptCall(action, data, true);
     }
     if(/^\s*<(!DOCTYPE|html)/i.test(rawText)){
