@@ -719,7 +719,7 @@ async function handleFile201Upload(p, label, fileInput, uploaderName){
     const res = await appsScriptCall('uploadPersonDocument', { filename: file.name, base64: b64, personId: p._uid, personName: fullName(p) });
     if(!res.url) throw new Error('Backend did not return a file URL.');
     p.file201Uploads = p.file201Uploads || [];
-    p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: uploaderName||'' });
+    p.file201Uploads.unshift({ url: res.url, label: label||'', uploadedAt: new Date().toISOString(), filename: file.name, uploadedBy: uploaderName||'', uploaderRole: isAdmin() ? 'admin' : 'employee' });
     logActivity(`Uploaded a 201 document for ${fullName(p)}`);
     // Updates ONLY this one person's row on the backend — deliberately not a full googleSaveAll(),
     // since this can run from an Employee session where the local copy of everyone else's data may
@@ -1357,6 +1357,17 @@ function renderDashboard(){
       const overdue = !lastBackup || daysSince>30;
       const label = !lastBackup ? 'No backup has been made yet on this device' : `Last backup: ${daysSince===0?'today':daysSince+' day'+(daysSince===1?'':'s')+' ago'}`;
       return `<div class="notice ${overdue?'':'blue'}" style="${overdue?'background:#FDECEA;border-color:#E8B4AC;':''}">${overdue?'⚠':'💾'} ${label}${overdue?' — consider making one soon':''}. <a href="#" data-nav="dashboard" onclick="document.getElementById('exportBtn').click(); return false;" style="color:var(--court);font-weight:600;">Export Backup now →</a></div>`;
+    })() : ''}
+    ${!publicView ? (()=>{
+      const sevenDaysAgo = Date.now() - 7*24*3600*1000;
+      const recent = [];
+      activePersonnel().forEach(p=>{
+        (p.file201Uploads||[]).forEach(u=>{
+          if(u.uploaderRole==='employee' && new Date(u.uploadedAt).getTime()>sevenDaysAgo) recent.push({p, u});
+        });
+      });
+      if(!recent.length) return '';
+      return `<div class="notice blue">📄 ${recent.length} 201 document${recent.length===1?'':'s'} uploaded by employees in the last 7 days — <a href="#" data-nav="directory" style="color:var(--court);font-weight:600;">review in Directory →</a></div>`;
     })() : ''}
     ${announcement.text ? `<div class="announcement-banner">📢 <div><div class="ann-text">${esc(announcement.text)}</div>${announcement.updatedAt ? `<div class="ann-meta">Posted by ${esc(announcement.updatedBy||'admin')} · ${new Date(announcement.updatedAt).toLocaleString()}</div>` : ''}</div></div>` : ''}
     ${publicView ? `<div class="notice blue">This is the public summary view — aggregate counts only, no names. Personnel details, search, and records require staff login.</div>` : ''}
@@ -3461,14 +3472,19 @@ function bindDynamicEvents(){
     if(!u){ toast('Incorrect username or password'); return; }
     session.user = u; logActivity(`${u.role} logged in: ${u.username}`);
     pingDeveloperTracker();
-    // Check for a fresher linked-account status right now, before deciding which page to land
-    // on — otherwise an employee whose account was linked after this device last synced would
-    // get routed straight to the New Hire form (bypassing any nav click, and the refresh tied to
-    // it) and get stuck there even though they're actually linked.
-    await refreshMyAccountLink();
-    const linkedNow = session.user.linkedPersonId && findPerson(session.user.linkedPersonId);
-    state.view = session.user.role==='admin' ? 'dashboard' : (linkedNow ? 'myprofile' : 'newhire');
+    // Route immediately using whatever's already known locally — no reason to make someone stare
+    // at a blank screen waiting on a network round-trip just to see their own account. If a fresher
+    // link status turns up a moment later (see below), the view quietly corrects itself instead of
+    // leaving anyone stuck — the safety net stays, it just no longer blocks the login itself.
+    const linkedLocally = session.user.linkedPersonId && findPerson(session.user.linkedPersonId);
+    state.view = session.user.role==='admin' ? 'dashboard' : (linkedLocally ? 'myprofile' : 'newhire');
     render(); toast('Welcome, ' + session.user.displayName);
+    if(session.user.role!=='admin'){
+      refreshMyAccountLink().then(()=>{
+        const linkedNow = session.user.linkedPersonId && findPerson(session.user.linkedPersonId);
+        if(linkedNow && state.view==='newhire'){ state.view='myprofile'; render(); toast('Your account has been linked to your record.'); }
+      }).catch(()=>{});
+    }
   });
 }
 
