@@ -42,6 +42,7 @@ a{color:inherit;} button{font-family:'Inter',sans-serif; cursor:pointer;}
 .status-subrow{padding:0 16px 11px; font-size:10.5px; color:#8FADA8; display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:wrap; row-gap:4px;}
 .status-subrow #googleStatus{white-space:nowrap;}
 .status-subrow #sidebarClock{white-space:nowrap; font-variant-numeric:tabular-nums; text-align:right;}
+.connected-school-row{padding:0 16px 11px; font-size:10.5px; color:#8FADA8; line-height:1.4; white-space:normal; word-break:break-word;}
 .music-toggle-btn{background:none; border:1px solid rgba(255,255,255,.25); border-radius:6px; color:#EFEAE0; font-size:11px; padding:2px 6px; cursor:pointer; flex-shrink:0;}
 .music-toggle-btn:hover{background:rgba(255,255,255,.1);}
 .music-toggle-btn.hidden-no-music{display:none;}
@@ -321,6 +322,7 @@ select, .toolbar input[type=text]{border:1px solid var(--line); border-radius:8p
       <div class="school-switch"><select id="schoolSwitcher"></select></div>
       <div class="session-badge" id="sessionBadge"></div>
       <div class="status-subrow"><span id="googleStatus"></span><button type="button" id="musicToggleBtn" class="music-toggle-btn" title="Mute/unmute background music">🔇</button><span id="sidebarClock"></span></div>
+      <div class="connected-school-row" id="connectedSchoolRow"></div>
     </div>
     <div class="nav" id="nav"></div>
     <div class="sidebar-copyright">© <span id="yr"></span> SANSA 201 Portal by RJCA.<br>All rights reserved.</div>
@@ -1160,9 +1162,13 @@ function render(){
   renderNav(); renderSessionBadge(); renderSchoolSwitcher();
   const gstat = document.getElementById('googleStatus');
   const currentSchoolName = schools.find(s=>s.id===currentSchoolId)?.name;
-  gstat.innerHTML = isGoogleConfigured()
-    ? `🟢 Connected${currentSchoolName ? ' — <strong>'+esc(currentSchoolName)+'</strong>' : ''}`
-    : `⚪ Offline${currentSchoolName ? ' — showing local data for <strong>'+esc(currentSchoolName)+'</strong>' : ''}`;
+  gstat.innerHTML = isGoogleConfigured() ? `🟢 Connected` : `⚪ Offline`;
+  const schoolRow = document.getElementById('connectedSchoolRow');
+  if(schoolRow){
+    schoolRow.innerHTML = currentSchoolName
+      ? (isGoogleConfigured() ? `Showing data for <strong>${esc(currentSchoolName)}</strong>` : `Local data for <strong>${esc(currentSchoolName)}</strong>`)
+      : '';
+  }
   document.getElementById('sidebarFoot').style.display = isAdmin() ? 'block' : 'none';
 
   const alerts = computeAlerts();
