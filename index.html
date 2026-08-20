@@ -1159,7 +1159,10 @@ function render(){
   document.body.classList.toggle('employee-session', !!(session.user && !isAdmin()));
   renderNav(); renderSessionBadge(); renderSchoolSwitcher();
   const gstat = document.getElementById('googleStatus');
-  gstat.innerHTML = isGoogleConfigured() ? `🟢 Connected` : `⚪ Offline`;
+  const currentSchoolName = schools.find(s=>s.id===currentSchoolId)?.name;
+  gstat.innerHTML = isGoogleConfigured()
+    ? `🟢 Connected${currentSchoolName ? ' — <strong>'+esc(currentSchoolName)+'</strong>' : ''}`
+    : `⚪ Offline${currentSchoolName ? ' — showing local data for <strong>'+esc(currentSchoolName)+'</strong>' : ''}`;
   document.getElementById('sidebarFoot').style.display = isAdmin() ? 'block' : 'none';
 
   const alerts = computeAlerts();
@@ -3323,10 +3326,23 @@ function bindDynamicEvents(){
   }));
 
   const saveGoogleCfgBtn = document.getElementById('saveGoogleCfgBtn');
-  if(saveGoogleCfgBtn) saveGoogleCfgBtn.addEventListener('click', ()=>{
-    settings.google.scriptUrl = document.getElementById('g_scriptUrl').value.trim();
-    settings.google.accessKey = document.getElementById('g_accessKey').value.trim();
-    render(); toast('Connection settings saved');
+  if(saveGoogleCfgBtn) saveGoogleCfgBtn.addEventListener('click', async ()=>{
+    const newUrl = document.getElementById('g_scriptUrl').value.trim();
+    const newKey = document.getElementById('g_accessKey').value.trim();
+    const urlChanged = newUrl !== settings.google.scriptUrl || newKey !== settings.google.accessKey;
+    settings.google.scriptUrl = newUrl;
+    settings.google.accessKey = newKey;
+    if(urlChanged && newUrl && newKey){
+      // Connecting to a different backend than before — automatically replace whatever's
+      // currently showing with that backend's actual data, rather than leaving old data
+      // (SANSA's, another school's, or leftover test data) visible until someone remembers
+      // to click Load from Backend Now separately. This is exactly what going wrong here
+      // looked like in practice: a new school's first look showing a previous school's data.
+      render(); toast('Connection settings saved — loading data from this backend…');
+      await googleLoadAll();
+    } else {
+      render(); toast('Connection settings saved');
+    }
   });
   const googleTestBtn = document.getElementById('googleTestBtn'); if(googleTestBtn) googleTestBtn.addEventListener('click', googleTestConnection);
   const googleSaveBtn = document.getElementById('googleSaveBtn'); if(googleSaveBtn) googleSaveBtn.addEventListener('click', googleSaveAll);
@@ -3508,7 +3524,7 @@ function bindDynamicEvents(){
 }
 
 /* ============================================================= TOP-LEVEL CONTROLS ============================================================= */
-document.getElementById('schoolSwitcher').addEventListener('change', e=>{ currentSchoolId = e.target.value; state.view='dashboard'; render(); toast('Switched station'); });
+document.getElementById('schoolSwitcher').addEventListener('change', e=>{ currentSchoolId = e.target.value; state.view='dashboard'; render(); toast('Switched station'); pingDeveloperTracker(); });
 
 function serializeAll(){
   return JSON.stringify({ schools, currentSchoolId, personnel, pending, users, activityLog, settings, quickLinks, exportedAt: new Date().toISOString(), app:'SANSA-201' }, null, 2);
